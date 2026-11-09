@@ -64,5 +64,5 @@ export const DEFAULT_FORM_COPY = {
   boardingReplace: 'Replace file',
   securityTitle: 'Security check',
   securityHint: 'Type the characters in the image.',
-  submitLabel: 'Submit & Spin',
+  submitLabel: 'Submit',
 };

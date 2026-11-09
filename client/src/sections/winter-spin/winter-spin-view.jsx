@@ -6,9 +6,11 @@ import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
 import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
 import Grid from '@mui/material/Unstable_Grid2';
+import CircularProgress from '@mui/material/CircularProgress';
 import { alpha, keyframes } from '@mui/material/styles';
 
 import Footer from 'src/layouts/dashboard/footer';
@@ -81,7 +83,7 @@ function ResultPlaceholder() {
         variant="body2"
         sx={{ mt: 1, color: alpha('#fff', 0.72), maxWidth: 300, lineHeight: 1.55 }}
       >
-        Spin the wheel to reveal your Winter Carnival reward.
+        Tap Spin & Win under the wheel to reveal your Winter Carnival reward.
       </Typography>
     </Box>
   );
@@ -103,8 +105,7 @@ export default function WinterSpinView() {
   const [spinToken, setSpinToken] = useState(0);
   const [pendingEntry, setPendingEntry] = useState(null);
   const [showResult, setShowResult] = useState(false);
-
-  const autoSpinStarted = useRef(false);
+  const spinLock = useRef(false);
 
   const canSpin = Boolean(ready && campaignActive && !alreadySpun && !spinning && !entry);
 
@@ -189,7 +190,8 @@ export default function WinterSpinView() {
   }, [pendingEntry]);
 
   const handleSpin = useCallback(async () => {
-    if (!canSpin) return;
+    if (!canSpin || spinLock.current) return;
+    spinLock.current = true;
     setError('');
     setShowResult(false);
 
@@ -200,6 +202,7 @@ export default function WinterSpinView() {
       const nextEntry = data?.entry;
 
       if (!nextEntry?.prizeCode) {
+        spinLock.current = false;
         setSpinning(false);
         setError('Spin failed. Please try again.');
         return;
@@ -217,6 +220,7 @@ export default function WinterSpinView() {
       setTargetIndex(segmentIndexForCode(nextEntry.prizeCode));
       setSpinToken((t) => t + 1);
     } catch (err) {
+      spinLock.current = false;
       setSpinning(false);
       const statusCode = err.response?.status;
       if (statusCode === 403 || statusCode === 401) {
@@ -226,12 +230,6 @@ export default function WinterSpinView() {
       setError(err.response?.data?.message || 'Unable to spin right now. Please try again.');
     }
   }, [canSpin]);
-
-  useEffect(() => {
-    if (loading || blocked || !canSpin || autoSpinStarted.current) return;
-    autoSpinStarted.current = true;
-    handleSpin();
-  }, [loading, blocked, canSpin, handleSpin]);
 
   if (blocked) {
     return <Navigate to="/404" replace />;
@@ -269,6 +267,30 @@ export default function WinterSpinView() {
               onSpinComplete={handleSpinComplete}
             />
           </Box>
+
+          {canSpin || spinning ? (
+            <Button
+              size="large"
+              variant="contained"
+              disabled={!canSpin}
+              onClick={handleSpin}
+              startIcon={spinning ? <CircularProgress size={18} sx={{ color: BRAND.navy }} /> : null}
+              sx={{
+                minWidth: { xs: 220, sm: 260 },
+                py: 1.35,
+                px: 4,
+                fontWeight: 800,
+                letterSpacing: 0.4,
+                color: BRAND.navy,
+                bgcolor: BRAND.gold,
+                boxShadow: `0 10px 28px ${alpha(BRAND.gold, 0.35)}`,
+                '&:hover': { bgcolor: '#FFD56A', boxShadow: `0 12px 32px ${alpha(BRAND.gold, 0.45)}` },
+                '&.Mui-disabled': { color: BRAND.navy, bgcolor: BRAND.gold },
+              }}
+            >
+              {spinning ? 'Spinning…' : 'Spin & Win'}
+            </Button>
+          ) : null}
 
           {error ? (
             <Alert
