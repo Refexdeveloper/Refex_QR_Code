@@ -6,7 +6,6 @@ const {
   WinterSpinToken,
   WinterCampaignSetting,
 } = require("../models");
-const winterCampaignEmailService = require("./winterCampaignEmailService");
 
 /** Shared secret for trusted server-to-server token issue calls. */
 const ISSUE_API_KEY = process.env.WINTER_SPIN_API_KEY || "";
@@ -717,14 +716,6 @@ async function spinOnce({ name, phone, token, ip, userAgent }) {
 
       return { alreadySpun: false, entry, prize };
     });
-
-    if (!result.alreadySpun && result.entry && !result.entry.is_win) {
-      try {
-        await winterCampaignEmailService.sendThankYouOnce(cleanPhone);
-      } catch (mailError) {
-        console.error("Winter campaign thank-you email failed:", mailError.message);
-      }
-    }
 
     return {
       ok: true,

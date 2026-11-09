@@ -153,13 +153,6 @@ sequelize
     try {
       const qi = sequelize.getQueryInterface();
       const campaignTable = await qi.describeTable("winter_campaign_submissions");
-      if (!campaignTable.confirmation_sent_at) {
-        await qi.addColumn("winter_campaign_submissions", "confirmation_sent_at", {
-          type: Sequelize.DataTypes.DATE,
-          allowNull: true,
-        });
-        console.log("Added winter_campaign_submissions.confirmation_sent_at column");
-      }
       const campaignColumns = [
         ["address", { type: Sequelize.DataTypes.TEXT, allowNull: true }],
         ["outlet", { type: Sequelize.DataTypes.STRING(120), allowNull: true }],
