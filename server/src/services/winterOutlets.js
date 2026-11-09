@@ -36,6 +36,7 @@ const OUTLETS = [
   { brand: "Pavers England", location: "Domestic security hold area", minimum: 5000 },
   { brand: "Porsche Design", location: "Domestic security hold area", minimum: 20000 },
   { brand: "Puma", location: "Domestic security hold area", minimum: 2000 },
+  { brand: "Ramraj Cotton", location: "Domestic security hold area", minimum: 1000 },
   { brand: "Rare Planet", location: "Domestic security hold area", minimum: 1000 },
   { brand: "Relay", location: "Domestic security hold area", minimum: 500 },
   { brand: "Renee Cosmetics", location: "Domestic security hold area", minimum: 500 },
