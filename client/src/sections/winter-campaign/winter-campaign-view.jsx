@@ -60,6 +60,7 @@ const OUTLETS = [
   ['Pavers England', 'Domestic security hold area', 5000],
   ['Porsche Design', 'Domestic security hold area', 20000],
   ['Puma', 'Domestic security hold area', 2000],
+  ['Ramraj Cotton', 'Domestic security hold area', 1000],
   ['Rare Planet', 'Domestic security hold area', 1000],
   ['Relay', 'Domestic security hold area', 500],
   ['Renee Cosmetics', 'Domestic security hold area', 500],
