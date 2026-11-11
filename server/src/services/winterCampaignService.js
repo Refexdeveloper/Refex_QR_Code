@@ -39,6 +39,44 @@ function parseInvoice(raw) {
   return Math.round(value * 100) / 100;
 }
 
+function outletMatchWhere(outletLabel, email, phone) {
+  return {
+    outlet: outletLabel,
+    [Op.or]: [{ email }, { phone }],
+  };
+}
+
+function duplicateOutletMessage(matches, email, phone) {
+  const emailUsed = matches.some((row) => row.email === email);
+  const phoneUsed = matches.some((row) => row.phone === phone);
+  if (emailUsed && phoneUsed) {
+    return "This email and mobile number have already been used for this outlet.";
+  }
+  if (emailUsed) return "This email has already been used for this outlet.";
+  return "This mobile number has already been used for this outlet.";
+}
+
+async function openExistingSpin(existing) {
+  const access = await winterSpinService.mintSpinAccess({
+    name: existing.name,
+    phone: existing.phone,
+    outlet: existing.outlet,
+    submissionId: existing.id,
+  });
+  if (!access.ok) return access;
+  if (existing.token !== access.token) {
+    await existing.update({ token: access.token });
+  }
+  return {
+    ok: true,
+    alreadyRegistered: true,
+    message: "You have already entered this outlet. Opening your spin.",
+    spinPath: "/winter-carnival/spin",
+    sessionToken: access.token,
+    expiresAt: access.expiresAt,
+  };
+}
+
 async function registerSubmission({
   name,
   email,
@@ -116,24 +154,20 @@ async function registerSubmission({
     return { ok: false, status: 400, message: "Please agree to the campaign terms to continue." };
   }
 
-  const existing = await WinterCampaignSubmission.findOne({
-    where: { [Op.or]: [{ email: cleanEmail }, { phone: cleanPhone }] },
+  const priorEntries = await WinterCampaignSubmission.findAll({
+    where: outletMatchWhere(chosenOutlet.label, cleanEmail, cleanPhone),
   });
 
-  if (existing) {
+  if (priorEntries.length) {
     removeUploaded(uploads);
-    const access = await winterSpinService.mintSpinAccess({
-      name: existing.name,
-      phone: existing.phone,
-    });
-    if (!access.ok) return access;
+    const samePerson = priorEntries.find(
+      (row) => row.email === cleanEmail && row.phone === cleanPhone
+    );
+    if (priorEntries.length === 1 && samePerson) return openExistingSpin(samePerson);
     return {
-      ok: true,
-      alreadyRegistered: true,
-      message: "This email or phone has already been submitted. Opening your spin.",
-      spinPath: "/winter-carnival/spin",
-      sessionToken: access.token,
-      expiresAt: access.expiresAt,
+      ok: false,
+      status: 409,
+      message: duplicateOutletMessage(priorEntries, cleanEmail, cleanPhone),
     };
   }
 
@@ -151,17 +185,9 @@ async function registerSubmission({
     return { ok: false, status: 400, message: "Upload one boarding pass." };
   }
 
-  const access = await winterSpinService.mintSpinAccess({
-    name: cleanName,
-    phone: cleanPhone,
-  });
-  if (!access.ok) {
-    removeUploaded(uploads);
-    return access;
-  }
-
+  let submission;
   try {
-    const submission = await WinterCampaignSubmission.create({
+    submission = await WinterCampaignSubmission.create({
       name: cleanName,
       email: cleanEmail,
       phone: cleanPhone,
@@ -169,11 +195,24 @@ async function registerSubmission({
       address: null,
       outlet: chosenOutlet.label,
       invoice_value: invoice,
-      token: access.token,
+      token: null,
       created_at: new Date(),
       ip_address: ip ? String(ip).slice(0, 64) : null,
       user_agent: userAgent ? String(userAgent).slice(0, 512) : null,
     });
+
+    const access = await winterSpinService.mintSpinAccess({
+      name: cleanName,
+      phone: cleanPhone,
+      outlet: chosenOutlet.label,
+      submissionId: submission.id,
+    });
+    if (!access.ok) {
+      await submission.destroy();
+      removeUploaded(uploads);
+      return access;
+    }
+    await submission.update({ token: access.token });
 
     const billRows = [
       ...files.map((file) => ({ file, kind: "invoice" })),
@@ -201,25 +240,21 @@ async function registerSubmission({
     };
   } catch (error) {
     removeUploaded(uploads);
+    if (submission && !submission.token) {
+      await submission.destroy().catch(() => {});
+    }
     if (error.name === "SequelizeUniqueConstraintError") {
-      const again = await WinterCampaignSubmission.findOne({
-        where: { [Op.or]: [{ email: cleanEmail }, { phone: cleanPhone }] },
+      const again = await WinterCampaignSubmission.findAll({
+        where: outletMatchWhere(chosenOutlet.label, cleanEmail, cleanPhone),
       });
-      if (again) {
-        const retry = await winterSpinService.mintSpinAccess({
-          name: again.name,
-          phone: again.phone,
-        });
-        if (retry.ok) {
-          return {
-            ok: true,
-            alreadyRegistered: true,
-            message: "This email or phone has already been submitted. Opening your spin.",
-            spinPath: "/winter-carnival/spin",
-            sessionToken: retry.token,
-            expiresAt: retry.expiresAt,
-          };
-        }
+      const samePerson = again.find((row) => row.email === cleanEmail && row.phone === cleanPhone);
+      if (again.length === 1 && samePerson) return openExistingSpin(samePerson);
+      if (again.length) {
+        return {
+          ok: false,
+          status: 409,
+          message: duplicateOutletMessage(again, cleanEmail, cleanPhone),
+        };
       }
     }
     throw error;

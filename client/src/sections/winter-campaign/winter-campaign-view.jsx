@@ -264,7 +264,25 @@ export default function WinterCampaignView() {
       .get('/api/winter-campaign/form-copy')
       .then((res) => {
         const saved = res.data?.results?.copy;
-        if (!cancelled && saved) setCopy({ ...DEFAULT_FORM_COPY, ...saved });
+        if (!cancelled && saved) {
+          const next = { ...DEFAULT_FORM_COPY, ...saved };
+          if (next.formSubtitle === 'One entry per email and phone number. Required fields are marked.') {
+            next.formSubtitle = DEFAULT_FORM_COPY.formSubtitle;
+          }
+          if (Array.isArray(next.howTo)) {
+            next.howTo = next.howTo.map((step) =>
+              step === 'Accept these terms. Each qualifying invoice can be entered once and receives one spin.'
+                ? DEFAULT_FORM_COPY.howTo[3]
+                : step
+            );
+          }
+          if (Array.isArray(next.terms)) {
+            const previousRule =
+              '3. Each eligible Participant who meets the outlet minimum receives one entry and one spin, whatever the outlet and whatever the amount spent above the minimum. Each entry in a weekly bumper prize draw has an equal chance. The spin can show: (a) Better Luck Next Time; or (b) Eligible for Bumper Gift through Lucky Draw; or (c) a gift worth up to ₹2,000, ₹5,000, ₹7,000, or ₹10,000.';
+            next.terms = next.terms.map((item) => (item === previousRule ? DEFAULT_FORM_COPY.terms[2] : item));
+          }
+          setCopy(next);
+        }
       })
       .catch(() => {});
     return () => {

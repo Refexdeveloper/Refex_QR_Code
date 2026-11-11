@@ -19,7 +19,18 @@ module.exports = (sequelize) => {
       phone: {
         type: DataTypes.STRING(15),
         allowNull: false,
-        unique: true,
+      },
+      outlet: {
+        type: DataTypes.STRING(160),
+        allowNull: true,
+      },
+      submission_id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true,
+      },
+      spin_scope: {
+        type: DataTypes.STRING(220),
+        allowNull: false,
       },
       token: {
         type: DataTypes.STRING(255),
@@ -62,7 +73,8 @@ module.exports = (sequelize) => {
       tableName: "winter_spin_entries",
       timestamps: false,
       indexes: [
-        { unique: true, fields: ["phone"] },
+        { unique: true, name: "winter_spin_scope_unique", fields: ["spin_scope"] },
+        { unique: true, name: "winter_spin_submission_unique", fields: ["submission_id"] },
         { fields: ["week_key", "prize_code"] },
       ],
     }

@@ -24,12 +24,10 @@ module.exports = (sequelize) => {
       email: {
         type: DataTypes.STRING(180),
         allowNull: false,
-        unique: true,
       },
       phone: {
         type: DataTypes.STRING(15),
         allowNull: false,
-        unique: true,
       },
       consent: {
         type: DataTypes.BOOLEAN,
@@ -72,8 +70,16 @@ module.exports = (sequelize) => {
       tableName: "winter_campaign_submissions",
       timestamps: false,
       indexes: [
-        { unique: true, fields: ["email"] },
-        { unique: true, fields: ["phone"] },
+        {
+          unique: true,
+          name: "winter_campaign_email_outlet_unique",
+          fields: ["email", "outlet"],
+        },
+        {
+          unique: true,
+          name: "winter_campaign_phone_outlet_unique",
+          fields: ["phone", "outlet"],
+        },
       ],
     }
   );

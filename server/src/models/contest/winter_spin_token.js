@@ -25,6 +25,14 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(15),
         allowNull: false,
       },
+      outlet: {
+        type: DataTypes.STRING(160),
+        allowNull: true,
+      },
+      submission_id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true,
+      },
       created_at: {
         type: DataTypes.DATE,
         allowNull: false,

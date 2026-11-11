@@ -54,6 +54,61 @@ function prizeLabelFor(entry) {
   return catalog ? catalog.label : entry.prize_label;
 }
 
+function entryForSubmission(submission, entries) {
+  return (
+    entries.find((entry) => entry.submission_id === submission.id) ||
+    entries.find((entry) => submission.token && entry.token && entry.token === submission.token) ||
+    entries.find(
+      (entry) => entry.outlet && entry.phone === submission.phone && entry.outlet === submission.outlet
+    ) ||
+    null
+  );
+}
+
+function submissionForEntry(entry, submissions) {
+  const samePhone = submissions.filter((row) => row.phone === entry.phone);
+  return (
+    submissions.find((row) => entry.submission_id && row.id === entry.submission_id) ||
+    submissions.find((row) => entry.token && row.token && row.token === entry.token) ||
+    submissions.find((row) => entry.outlet && row.phone === entry.phone && row.outlet === entry.outlet) ||
+    (samePhone.length === 1 ? samePhone[0] : null)
+  );
+}
+
+async function loadEntriesForSubmissions(rows) {
+  const ids = rows.map((row) => row.id);
+  const tokens = rows.map((row) => row.token).filter(Boolean);
+  const phones = [...new Set(rows.map((row) => row.phone))];
+  const or = [];
+  if (ids.length) or.push({ submission_id: ids });
+  if (tokens.length) or.push({ token: tokens });
+  if (phones.length) or.push({ phone: phones });
+  if (!or.length) return [];
+  return WinterSpinEntry.findAll({ where: { [Op.or]: or } });
+}
+
+async function loadSubmissionsForEntries(entries) {
+  const ids = entries.map((entry) => entry.submission_id).filter(Boolean);
+  const tokens = entries.map((entry) => entry.token).filter(Boolean);
+  const phones = [...new Set(entries.map((entry) => entry.phone))];
+  const or = [];
+  if (ids.length) or.push({ id: ids });
+  if (tokens.length) or.push({ token: tokens });
+  if (phones.length) or.push({ phone: phones });
+  if (!or.length) return [];
+  return WinterCampaignSubmission.findAll({
+    where: { [Op.or]: or },
+    attributes: ["id", "phone", "email", "token", "outlet", "invoice_value", "address", "created_at"],
+    include: [
+      {
+        model: WinterCampaignBill,
+        as: "bills",
+        attributes: ["id", "original_name", "mime_type", "size_bytes", "kind"],
+      },
+    ],
+  });
+}
+
 function mapPrize(entry) {
   if (!entry) return null;
   return {
@@ -83,11 +138,7 @@ async function listSubmissions(query) {
     distinct: true,
   });
 
-  const phones = rows.map((row) => row.phone);
-  const entries = phones.length
-    ? await WinterSpinEntry.findAll({ where: { phone: phones } })
-    : [];
-  const entryByPhone = new Map(entries.map((entry) => [entry.phone, entry]));
+  const entries = await loadEntriesForSubmissions(rows);
 
   return {
     page,
@@ -105,7 +156,7 @@ async function listSubmissions(query) {
       consent: row.consent,
       createdAt: row.created_at,
       bills: (row.bills || []).map(mapBill),
-      prize: mapPrize(entryByPhone.get(row.phone)),
+      prize: mapPrize(entryForSubmission(row, entries)),
     })),
   };
 }
@@ -122,21 +173,7 @@ async function listWinners(query) {
     limit,
     offset,
   });
-  const phones = rows.map((row) => row.phone);
-  const submissions = phones.length
-    ? await WinterCampaignSubmission.findAll({
-        where: { phone: phones },
-        attributes: ["phone", "email", "outlet", "invoice_value", "address", "created_at"],
-        include: [
-          {
-            model: WinterCampaignBill,
-            as: "bills",
-            attributes: ["id", "original_name", "mime_type", "size_bytes", "kind"],
-          },
-        ],
-      })
-    : [];
-  const submissionByPhone = new Map(submissions.map((row) => [row.phone, row]));
+  const submissions = await loadSubmissionsForEntries(rows);
 
   return {
     page,
@@ -144,7 +181,7 @@ async function listWinners(query) {
     total: count,
     totalPage: Math.max(Math.ceil(count / limit), 1),
     records: rows.map((row) => {
-      const submission = submissionByPhone.get(row.phone);
+      const submission = submissionForEntry(row, submissions);
       return {
         id: row.id,
         name: row.name,
@@ -197,14 +234,10 @@ async function buildExport(query) {
     include: [{ model: WinterCampaignBill, as: "bills", attributes: ["original_name", "kind"] }],
     order: [["created_at", "DESC"]],
   });
-  const phones = submissions.map((row) => row.phone);
-  const spinEntries = phones.length
-    ? await WinterSpinEntry.findAll({ where: { phone: phones } })
-    : [];
-  const entryByPhone = new Map(spinEntries.map((entry) => [entry.phone, entry]));
+  const spinEntries = await loadEntriesForSubmissions(submissions);
 
   const entryRows = submissions.map((row) => {
-    const prize = entryByPhone.get(row.phone);
+    const prize = entryForSubmission(row, spinEntries);
     return {
       Name: row.name,
       Email: row.email,
@@ -235,22 +268,18 @@ async function buildExport(query) {
     },
     order: [["spun_at", "DESC"]],
   });
-  const winnerPhones = winners.map((row) => row.phone);
-  const winnerSubmissions = winnerPhones.length
-    ? await WinterCampaignSubmission.findAll({
-        where: { phone: winnerPhones },
-        attributes: ["phone", "email"],
-      })
-    : [];
-  const emailByPhone = new Map(winnerSubmissions.map((row) => [row.phone, row.email]));
-  const winnerRows = winners.map((row) => ({
+  const winnerSubmissions = await loadSubmissionsForEntries(winners);
+  const winnerRows = winners.map((row) => {
+    const submission = submissionForEntry(row, winnerSubmissions);
+    return {
     Name: row.name,
-    Email: emailByPhone.get(row.phone) || "",
+    Email: submission?.email || "",
     Phone: exportPhone(row.phone),
     Prize: prizeLabelFor(row),
     Week: row.week_key,
     Won: formatExportWhen(row.spun_at),
-  }));
+  };
+  });
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(
@@ -306,14 +335,22 @@ async function updateSubmission(id, { name, email, phone }) {
   const clash = await WinterCampaignSubmission.findOne({
     where: {
       id: { [Op.ne]: submission.id },
+      outlet: submission.outlet || { [Op.is]: null },
       [Op.or]: [{ email: cleanEmail }, { phone: cleanPhone }],
     },
   });
   if (clash) {
-    return { ok: false, status: 409, message: "Another entry already uses this email or phone." };
+    return {
+      ok: false,
+      status: 409,
+      message: "Another entry for this outlet already uses this email or mobile number.",
+    };
   }
 
   const previousPhone = submission.phone;
+  const previousScope = winterSpinService.spinScopeFor(previousPhone, submission.outlet);
+  const nextScope = winterSpinService.spinScopeFor(cleanPhone, submission.outlet);
+  const tokenMatch = submission.token ? [{ token: submission.token }] : [];
   try {
     await sequelize.transaction(async (transaction) => {
       await submission.update(
@@ -322,16 +359,28 @@ async function updateSubmission(id, { name, email, phone }) {
       );
       await WinterSpinToken.update(
         { name: cleanName, phone: cleanPhone },
-        { where: { phone: previousPhone }, transaction }
+        {
+          where: { [Op.or]: [{ submission_id: submission.id }, ...tokenMatch] },
+          transaction,
+        }
       );
       await WinterSpinEntry.update(
-        { name: cleanName, phone: cleanPhone },
-        { where: { phone: previousPhone }, transaction }
+        { name: cleanName, phone: cleanPhone, spin_scope: nextScope },
+        {
+          where: {
+            [Op.or]: [{ submission_id: submission.id }, ...tokenMatch, { spin_scope: previousScope }],
+          },
+          transaction,
+        }
       );
     });
   } catch (error) {
     if (error.name === "SequelizeUniqueConstraintError") {
-      return { ok: false, status: 409, message: "Another entry already uses this email or phone." };
+      return {
+        ok: false,
+        status: 409,
+        message: "Another entry for this outlet already uses this email or mobile number.",
+      };
     }
     throw error;
   }
@@ -356,11 +405,21 @@ async function deleteSubmission(id) {
   if (!submission) return { ok: false, status: 404, message: "Entry not found." };
 
   const bills = submission.bills || [];
+  const scope = winterSpinService.spinScopeFor(submission.phone, submission.outlet);
+  const tokenMatch = submission.token ? [{ token: submission.token }] : [];
   await sequelize.transaction(async (transaction) => {
     await WinterCampaignBill.destroy({ where: { submission_id: submission.id }, transaction });
+    await WinterSpinToken.destroy({
+      where: { [Op.or]: [{ submission_id: submission.id }, ...tokenMatch] },
+      transaction,
+    });
+    await WinterSpinEntry.destroy({
+      where: {
+        [Op.or]: [{ submission_id: submission.id }, ...tokenMatch, { spin_scope: scope }],
+      },
+      transaction,
+    });
     await submission.destroy({ transaction });
-    await WinterSpinToken.destroy({ where: { phone: submission.phone }, transaction });
-    await WinterSpinEntry.destroy({ where: { phone: submission.phone }, transaction });
   });
   removeBillFiles(bills);
   return { ok: true, message: "Entry removed." };

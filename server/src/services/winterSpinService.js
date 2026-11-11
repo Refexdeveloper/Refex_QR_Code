@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { Op } = require("sequelize");
 const {
   sequelize,
   WinterSpinEntry,
@@ -491,10 +492,69 @@ function buildSpinPath(name, phone, token) {
   )}&token=${encodeURIComponent(token)}`;
 }
 
+function spinScopeFor(phone, outlet) {
+  const cleanOutlet = String(outlet || "").trim();
+  return cleanOutlet ? `${phone}::${cleanOutlet}` : phone;
+}
+
+function tokenResult(record, reused) {
+  const spinPath = buildSpinPath(record.name, record.phone, record.token);
+  return {
+    ok: true,
+    reused,
+    token: record.token,
+    name: record.name,
+    phone: record.phone,
+    expiresAt: record.expires_at,
+    spinPath,
+    spinUrl: `${PUBLIC_BASE_URL}${spinPath}`,
+  };
+}
+
+async function findScopedEntry(access, transaction, lock) {
+  const record = access.tokenRecord || {};
+  const submissionId = record.submission_id || null;
+  const outlet = String(record.outlet || "").trim();
+  const options = {};
+  if (transaction) {
+    options.transaction = transaction;
+    if (lock) options.lock = transaction.LOCK.UPDATE;
+  }
+
+  if (submissionId) {
+    const bySubmission = await WinterSpinEntry.findOne({
+      where: { submission_id: submissionId },
+      ...options,
+    });
+    if (bySubmission) return bySubmission;
+  }
+
+  if (access.cleanToken) {
+    const byToken = await WinterSpinEntry.findOne({
+      where: { token: access.cleanToken },
+      ...options,
+    });
+    if (byToken) return byToken;
+  }
+
+  if (outlet) {
+    return WinterSpinEntry.findOne({
+      where: { phone: access.cleanPhone, outlet },
+      ...options,
+    });
+  }
+
+  return WinterSpinEntry.findOne({
+    where: { phone: access.cleanPhone, outlet: { [Op.is]: null } },
+    ...options,
+  });
+}
+
 /**
  * Create or reuse a spin token. Used by our public campaign form.
+ * A submission id keeps the spin tied to that outlet entry.
  */
-async function mintSpinAccess({ name, phone }) {
+async function mintSpinAccess({ name, phone, outlet, submissionId }) {
   const cleanName = normalizeName(name);
   const cleanPhone = normalizePhone(phone);
 
@@ -516,26 +576,32 @@ async function mintSpinAccess({ name, phone }) {
     };
   }
 
-  // Reuse unused non-expired token for same phone if present
-  const existing = await WinterSpinToken.findOne({
-    where: { phone: cleanPhone, used_at: null },
-    order: [["id", "DESC"]],
-  });
-  if (
-    existing &&
-    (!existing.expires_at || new Date(existing.expires_at).getTime() > Date.now())
-  ) {
-    const spinPath = buildSpinPath(existing.name, existing.phone, existing.token);
-    return {
-      ok: true,
-      reused: true,
-      token: existing.token,
-      name: existing.name,
-      phone: existing.phone,
-      expiresAt: existing.expires_at,
-      spinPath,
-      spinUrl: `${PUBLIC_BASE_URL}${spinPath}`,
-    };
+  const cleanOutlet = String(outlet || "").trim() || null;
+
+  if (submissionId) {
+    const existing = await WinterSpinToken.findOne({
+      where: { submission_id: submissionId },
+      order: [["id", "DESC"]],
+    });
+    if (existing) {
+      const expired = existing.expires_at && new Date(existing.expires_at).getTime() <= Date.now();
+      if (existing.used_at && expired) {
+        existing.expires_at = new Date(Date.now() + Math.max(1, TOKEN_TTL_HOURS) * 60 * 60 * 1000);
+        await existing.update({ expires_at: existing.expires_at });
+      }
+      if (!expired || existing.used_at) return tokenResult(existing, true);
+    }
+  } else {
+    const existing = await WinterSpinToken.findOne({
+      where: { phone: cleanPhone, used_at: null, submission_id: { [Op.is]: null } },
+      order: [["id", "DESC"]],
+    });
+    if (
+      existing &&
+      (!existing.expires_at || new Date(existing.expires_at).getTime() > Date.now())
+    ) {
+      return tokenResult(existing, true);
+    }
   }
 
   const token = crypto.randomBytes(32).toString("hex");
@@ -545,23 +611,14 @@ async function mintSpinAccess({ name, phone }) {
     token,
     name: cleanName,
     phone: cleanPhone,
+    outlet: cleanOutlet,
+    submission_id: submissionId || null,
     created_at: new Date(),
     expires_at: expiresAt,
     used_at: null,
   });
 
-  const spinPath = buildSpinPath(cleanName, cleanPhone, token);
-
-  return {
-    ok: true,
-    reused: false,
-    token,
-    name: cleanName,
-    phone: cleanPhone,
-    expiresAt,
-    spinPath,
-    spinUrl: `${PUBLIC_BASE_URL}${spinPath}`,
-  };
+  return tokenResult({ name: cleanName, phone: cleanPhone, token, expires_at: expiresAt }, false);
 }
 
 /**
@@ -614,9 +671,7 @@ async function getStatus({ phone, name, token }) {
     return { ok: false, status: access.status, error: access.message };
   }
 
-  const entry = await WinterSpinEntry.findOne({
-    where: { phone: access.cleanPhone },
-  });
+  const entry = await findScopedEntry(access);
   const weekKey = getWeekKey();
   const config = await getCampaignConfig();
   const campaignActive = getIstDateString() <= config.endDate;
@@ -662,11 +717,7 @@ async function spinOnce({ name, phone, token, ip, userAgent }) {
 
   try {
     const result = await sequelize.transaction(async (transaction) => {
-      const existing = await WinterSpinEntry.findOne({
-        where: { phone: cleanPhone },
-        transaction,
-        lock: transaction.LOCK.UPDATE,
-      });
+      const existing = await findScopedEntry(access, transaction, true);
 
       if (existing) {
         return {
@@ -685,21 +736,26 @@ async function spinOnce({ name, phone, token, ip, userAgent }) {
         throw Object.assign(new Error("Invalid token"), { status: 403 });
       }
       if (lockedToken.used_at) {
-        const usedEntry = await WinterSpinEntry.findOne({
-          where: { phone: cleanPhone },
+        const usedEntry = await findScopedEntry(
+          { ...access, tokenRecord: lockedToken },
           transaction,
-        });
+          true
+        );
         if (usedEntry) {
           return { alreadySpun: true, entry: usedEntry };
         }
       }
 
       const prize = await pickSecurePrize(weekKey, transaction);
+      const outlet = String(lockedToken.outlet || "").trim() || null;
 
       const entry = await WinterSpinEntry.create(
         {
           name: cleanName,
           phone: cleanPhone,
+          outlet,
+          submission_id: lockedToken.submission_id || null,
+          spin_scope: spinScopeFor(cleanPhone, outlet),
           token: cleanToken,
           prize_code: prize.code,
           prize_label: prize.label,
@@ -728,9 +784,7 @@ async function spinOnce({ name, phone, token, ip, userAgent }) {
       return { ok: false, status: 403, message: "Access denied. Invalid token." };
     }
     if (error.name === "SequelizeUniqueConstraintError") {
-      const entry = await WinterSpinEntry.findOne({
-        where: { phone: cleanPhone },
-      });
+      const entry = await findScopedEntry(access);
       if (entry) {
         return {
           ok: true,
@@ -952,6 +1006,7 @@ module.exports = {
   normalizePhone,
   isValidPhone,
   normalizeName,
+  spinScopeFor,
   getStatus,
   getStatusByPhone: getStatus,
   mintSpinAccess,

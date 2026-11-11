@@ -5,13 +5,13 @@ export const DEFAULT_FORM_COPY = {
   organiser:
     'Organised by Refex Airports Retail Private Limited, having its Registered Office at Second Floor, Refex Towers, Sterling Road Signal, 313, Valluvar Kottam High Road, Nungambakkam, Chennai – 600034, Tamil Nadu, the Master Concessionaire, Pune Airport.',
   introduction:
-    'The Refex Winter Carnival rewards passengers who shop at select retail outlets at Pune Airport during the Contest Period. Participation is acceptance of the terms below. A qualifying purchase on a single invoice gives one entry and one spin.',
+    'The Refex Winter Carnival rewards passengers who shop at select retail outlets at Pune Airport during the Contest Period. Participation is acceptance of the terms below. A qualifying purchase on a single invoice gives one entry and one spin at that outlet. The same email and mobile number can be used once at each other outlet.',
   howToTitle: 'How to participate',
   howTo: [
     'Make a qualifying purchase at a participating outlet in the Pune Airport retail zone. The amount, including taxes, must meet that outlet’s minimum on a single invoice.',
     'Scan the campaign QR code on the danglers at the outlet, or on the flex banners across Pune Airport.',
     'Complete this form with your full name, mobile number, email address, the retail outlet and its location, the invoice value, and a clear photograph of the original invoice. A boarding pass photo is optional.',
-    'Accept these terms. Each qualifying invoice can be entered once and receives one spin.',
+    'Accept these terms. Each outlet can be entered once per email and mobile number, and that entry receives one spin.',
   ],
   prizesTitle: 'Instant gifts and weekly bumper prizes',
   prizes: [
@@ -22,7 +22,7 @@ export const DEFAULT_FORM_COPY = {
   terms: [
     '1. Participation is open only to Indian citizens aged eighteen (18) years and above, with a valid government-issued ID, who are travelling via Pune Airport during the Contest Period. It is not open to foreign nationals, NRIs, OCIs, PIOs, or to employees, agents, or contractors of the Organiser, including their immediate family members. The Organiser may ask for proof of eligibility and may reject entries that do not meet these criteria.',
     '2. Eligible Persons must make a qualifying purchase at a participating outlet in the Pune Airport retail zone. Each outlet has a minimum purchase threshold, inclusive of taxes, which must be met on a single invoice. The outlets, locations, and minimums are listed on this form (Annexure I). After the purchase, the Participant may scan a campaign QR code on danglers at the outlet or on flex banners across Pune Airport. This form asks for full name, mobile number, email address, outlet and location, invoice value, and a clear photograph of the original invoice. A boarding pass photograph is optional. Submitting it is explicit consent to participate and to provide personal details to the Organiser. These terms must be accepted with the checkbox. Only this official form is considered. Each qualifying invoice is one entry. Duplicate, forged, or manipulated data, including altered invoices, is invalid and can lead to disqualification.',
-    '3. Each eligible Participant who meets the outlet minimum receives one entry and one spin, whatever the outlet and whatever the amount spent above the minimum. Each entry in a weekly bumper prize draw has an equal chance. The spin can show: (a) Better Luck Next Time; or (b) Eligible for Bumper Gift through Lucky Draw; or (c) a gift worth up to ₹2,000, ₹5,000, ₹7,000, or ₹10,000.',
+    '3. Each eligible Participant who meets an outlet minimum receives one entry and one spin for that outlet, whatever the amount spent above the minimum. The same email and mobile number can be used once at each other participating outlet. Each entry in a weekly bumper prize draw has an equal chance. The spin can show: (a) Better Luck Next Time; or (b) Eligible for Bumper Gift through Lucky Draw; or (c) a gift worth up to ₹2,000, ₹5,000, ₹7,000, or ₹10,000.',
     '4. Outcomes (a) and (b) do not award an instant gift. All three outcomes remain eligible for the bumper gift through the lucky draw. A gift-category winner receives the corresponding instant gift from the Organiser, as set out in Annexure II. There are no cash gifts. The store manager contacts the Refex Floor Manager to verify the winning category before the gift is handed over.',
     '5. Weekly bumper prize lucky draws are conducted at the end of each week. Eligible entries, including Participants who did not spin, are included through a manual chit process. Each valid entry receives a unique entry ID. Eligible IDs for that week are printed on chits and placed in a sealed draw box. The number of chits drawn matches the prizes allocated for that week. Chits are drawn by an independent member of the Organiser’s appointed team and checked against the campaign database. If a chit is invalid or the Participant cannot be reached within seven business days, the Organiser may draw a reserve chit. Winners must provide self-attested copies of government-issued identity and address proof by email or post. Further proof may be required. The winner may need to sign an acceptance and release form. Failure to comply within ten (10) days of notification forfeits the prize, and the Organiser may select another winner.',
     '6. Prizes are subject to applicable tax deductions. A prize value above INR 10,000 attracts Tax Deducted at Source (TDS) under Section 393(3) of the Income Tax Act, 2025, currently at 30%. The winner pays the applicable TDS before claiming the prize, or authorises the Organiser to deduct the tax from the prize value where applicable. The winner shall cooperate with the Organiser, or any person nominated by it, on the procedure for claiming the prize.',
@@ -52,7 +52,8 @@ export const DEFAULT_FORM_COPY = {
     'The Organiser may amend these terms, and may substitute or withdraw a prize, once the change is published. Images, if any, are for representation only.',
   formKicker: 'Customer details',
   formTitle: 'Submit once to unlock your spin',
-  formSubtitle: 'One entry per email and phone number. Required fields are marked.',
+  formSubtitle:
+    'One entry per outlet. The same email and mobile number can be used at a different outlet. Required fields are marked.',
   consent:
     'I accept these Terms & Conditions and give my explicit consent to participate in the Refex Winter Carnival and to provide my personal details to the Organiser.',
   invoiceTitle: 'Invoice',
