@@ -113,8 +113,105 @@ async function ensureUniqueIndex(qi, table, fields, name) {
   console.log(`Added unique index ${name} on ${table}`);
 }
 
-sequelize
-  .sync()
+async function prepareWinterOutletSchema() {
+  const qi = sequelize.getQueryInterface();
+  const spinTable = await qi.describeTable("winter_spin_entries");
+  const tokenTable = await qi.describeTable("winter_spin_tokens");
+  if (!spinTable.token) {
+    await qi.addColumn("winter_spin_entries", "token", {
+      type: Sequelize.DataTypes.STRING(255),
+      allowNull: true,
+    });
+    console.log("Added winter_spin_entries.token column");
+  }
+  if (!spinTable.outlet) {
+    await qi.addColumn("winter_spin_entries", "outlet", {
+      type: Sequelize.DataTypes.STRING(160),
+      allowNull: true,
+    });
+  }
+  if (!spinTable.submission_id) {
+    await qi.addColumn("winter_spin_entries", "submission_id", {
+      type: Sequelize.DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+    });
+  }
+  if (!spinTable.spin_scope) {
+    await qi.addColumn("winter_spin_entries", "spin_scope", {
+      type: Sequelize.DataTypes.STRING(220),
+      allowNull: true,
+    });
+  }
+  if (!tokenTable.outlet) {
+    await qi.addColumn("winter_spin_tokens", "outlet", {
+      type: Sequelize.DataTypes.STRING(160),
+      allowNull: true,
+    });
+  }
+  if (!tokenTable.submission_id) {
+    await qi.addColumn("winter_spin_tokens", "submission_id", {
+      type: Sequelize.DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+    });
+  }
+
+  await ensureUniqueIndex(
+    qi,
+    "winter_campaign_submissions",
+    ["email", "outlet"],
+    "winter_campaign_email_outlet_unique"
+  );
+  await ensureUniqueIndex(
+    qi,
+    "winter_campaign_submissions",
+    ["phone", "outlet"],
+    "winter_campaign_phone_outlet_unique"
+  );
+  await dropUniqueIndexes(qi, "winter_campaign_submissions", [["email"], ["phone"]]);
+  await dropUniqueIndexes(qi, "winter_spin_entries", [["phone"]]);
+
+  await sequelize.query(`
+    UPDATE winter_spin_entries e
+    INNER JOIN winter_campaign_submissions s ON s.phone = e.phone
+    SET e.submission_id = s.id,
+        e.outlet = COALESCE(NULLIF(e.outlet, ''), s.outlet),
+        e.token = COALESCE(NULLIF(e.token, ''), s.token)
+    WHERE e.submission_id IS NULL
+  `);
+  await sequelize.query(`
+    UPDATE winter_spin_tokens t
+    INNER JOIN winter_campaign_submissions s ON s.token = t.token
+    SET t.submission_id = s.id,
+        t.outlet = COALESCE(NULLIF(t.outlet, ''), s.outlet)
+    WHERE t.submission_id IS NULL AND s.token IS NOT NULL AND s.token <> ''
+  `);
+  await sequelize.query(`
+    UPDATE winter_spin_entries
+    SET spin_scope = CASE
+      WHEN outlet IS NOT NULL AND outlet <> '' THEN CONCAT(phone, '::', outlet)
+      ELSE phone
+    END
+    WHERE spin_scope IS NULL OR spin_scope = ''
+  `);
+  await qi.changeColumn("winter_spin_entries", "spin_scope", {
+    type: Sequelize.DataTypes.STRING(220),
+    allowNull: false,
+  });
+  await ensureUniqueIndex(qi, "winter_spin_entries", ["spin_scope"], "winter_spin_scope_unique");
+  await ensureUniqueIndex(
+    qi,
+    "winter_spin_entries",
+    ["submission_id"],
+    "winter_spin_submission_unique"
+  );
+  console.log("Winter campaign outlet entry rules are in place");
+}
+
+prepareWinterOutletSchema()
+  .catch((error) => {
+    console.warn("Winter outlet entry schema check skipped:", error.message);
+  })
+  .then(() => sequelize.sync())
   .then(async () => {
     console.log("Database synced successfully");
 
@@ -172,20 +269,6 @@ sequelize
 
     try {
       const qi = sequelize.getQueryInterface();
-      const spinTable = await qi.describeTable("winter_spin_entries");
-      if (!spinTable.token) {
-        await qi.addColumn("winter_spin_entries", "token", {
-          type: Sequelize.DataTypes.STRING(255),
-          allowNull: true,
-        });
-        console.log("Added winter_spin_entries.token column");
-      }
-    } catch (e) {
-      console.warn("Winter spin schema check skipped:", e.message);
-    }
-
-    try {
-      const qi = sequelize.getQueryInterface();
       const campaignTable = await qi.describeTable("winter_campaign_submissions");
       const campaignColumns = [
         ["address", { type: Sequelize.DataTypes.TEXT, allowNull: true }],
@@ -223,95 +306,6 @@ sequelize
       }
     } catch (e) {
       console.warn("Winter form copy schema check skipped:", e.message);
-    }
-
-    try {
-      const qi = sequelize.getQueryInterface();
-      const spinTable = await qi.describeTable("winter_spin_entries");
-      const tokenTable = await qi.describeTable("winter_spin_tokens");
-      if (!spinTable.outlet) {
-        await qi.addColumn("winter_spin_entries", "outlet", {
-          type: Sequelize.DataTypes.STRING(160),
-          allowNull: true,
-        });
-      }
-      if (!spinTable.submission_id) {
-        await qi.addColumn("winter_spin_entries", "submission_id", {
-          type: Sequelize.DataTypes.INTEGER.UNSIGNED,
-          allowNull: true,
-        });
-      }
-      if (!spinTable.spin_scope) {
-        await qi.addColumn("winter_spin_entries", "spin_scope", {
-          type: Sequelize.DataTypes.STRING(220),
-          allowNull: true,
-        });
-      }
-      if (!tokenTable.outlet) {
-        await qi.addColumn("winter_spin_tokens", "outlet", {
-          type: Sequelize.DataTypes.STRING(160),
-          allowNull: true,
-        });
-      }
-      if (!tokenTable.submission_id) {
-        await qi.addColumn("winter_spin_tokens", "submission_id", {
-          type: Sequelize.DataTypes.INTEGER.UNSIGNED,
-          allowNull: true,
-        });
-      }
-
-      await ensureUniqueIndex(
-        qi,
-        "winter_campaign_submissions",
-        ["email", "outlet"],
-        "winter_campaign_email_outlet_unique"
-      );
-      await ensureUniqueIndex(
-        qi,
-        "winter_campaign_submissions",
-        ["phone", "outlet"],
-        "winter_campaign_phone_outlet_unique"
-      );
-      await dropUniqueIndexes(qi, "winter_campaign_submissions", [["email"], ["phone"]]);
-      await dropUniqueIndexes(qi, "winter_spin_entries", [["phone"]]);
-
-      await sequelize.query(`
-        UPDATE winter_spin_entries e
-        INNER JOIN winter_campaign_submissions s ON s.phone = e.phone
-        SET e.submission_id = s.id,
-            e.outlet = COALESCE(NULLIF(e.outlet, ''), s.outlet),
-            e.token = COALESCE(NULLIF(e.token, ''), s.token)
-        WHERE e.submission_id IS NULL
-      `);
-      await sequelize.query(`
-        UPDATE winter_spin_tokens t
-        INNER JOIN winter_campaign_submissions s ON s.token = t.token
-        SET t.submission_id = s.id,
-            t.outlet = COALESCE(NULLIF(t.outlet, ''), s.outlet)
-        WHERE t.submission_id IS NULL AND s.token IS NOT NULL AND s.token <> ''
-      `);
-      await sequelize.query(`
-        UPDATE winter_spin_entries
-        SET spin_scope = CASE
-          WHEN outlet IS NOT NULL AND outlet <> '' THEN CONCAT(phone, '::', outlet)
-          ELSE phone
-        END
-        WHERE spin_scope IS NULL OR spin_scope = ''
-      `);
-      await qi.changeColumn("winter_spin_entries", "spin_scope", {
-        type: Sequelize.DataTypes.STRING(220),
-        allowNull: false,
-      });
-      await ensureUniqueIndex(qi, "winter_spin_entries", ["spin_scope"], "winter_spin_scope_unique");
-      await ensureUniqueIndex(
-        qi,
-        "winter_spin_entries",
-        ["submission_id"],
-        "winter_spin_submission_unique"
-      );
-      console.log("Winter campaign outlet entry rules are in place");
-    } catch (e) {
-      console.warn("Winter outlet entry schema check skipped:", e.message);
     }
 
     try {
