@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { Op } = require("sequelize");
+const winterCampaignEmailService = require("./winterCampaignEmailService");
 const {
   sequelize,
   WinterSpinEntry,
@@ -772,6 +773,14 @@ async function spinOnce({ name, phone, token, ip, userAgent }) {
 
       return { alreadySpun: false, entry, prize };
     });
+
+    if (!result.alreadySpun && result.entry) {
+      try {
+        await winterCampaignEmailService.sendSpinThankYou(result.entry);
+      } catch (mailError) {
+        console.error("Winter campaign thank-you email failed:", mailError.message);
+      }
+    }
 
     return {
       ok: true,
