@@ -123,7 +123,8 @@ export default function WinterCampaignSpinDesk({ canManage }) {
   };
 
   const limited = (desk?.prizes || []).filter((prize) => prize.limited);
-  const openEnded = (desk?.prizes || []).filter((prize) => !prize.limited);
+  const interval = (desk?.prizes || []).filter((prize) => prize.interval);
+  const openEnded = (desk?.prizes || []).filter((prize) => !prize.limited && !prize.interval);
 
   return (
     <Stack spacing={2}>
@@ -151,7 +152,7 @@ export default function WinterCampaignSpinDesk({ canManage }) {
             ) : null}
           </Stack>
           <Typography variant="body2" color="text.secondary">
-            Entries and spins stay open through the end date. The start date is the contest period shown on the public form. Expected spins per day spreads the weekly gifts until the week has its own pace.
+            Entries and spins stay open through the end date. The start date is the contest period shown on the public form. Expected spins per day spreads the weekly gifts until the week has its own pace. Gifts up to ₹7,000 and ₹10,000 follow their own day count instead.
           </Typography>
           {loading && !desk ? (
             <CircularProgress size={28} />
@@ -201,7 +202,7 @@ export default function WinterCampaignSpinDesk({ canManage }) {
             <Typography variant="h6">Default weekly gift counts</Typography>
           </Box>
           <Typography variant="body2" color="text.secondary">
-            A new week starts with these counts. A week that already has stock keeps its own counts until you edit that week.
+            A new week starts with these counts for the ₹2,000 and ₹5,000 gifts. A week that already has stock keeps its own counts until you edit that week. The ₹7,000 gift is one every 10 days, and the ₹10,000 gift is one every 15 days.
           </Typography>
           <Box
             sx={{
@@ -296,6 +297,14 @@ export default function WinterCampaignSpinDesk({ canManage }) {
                     <TableCell>{prize.remaining}</TableCell>
                   </TableRow>
                 ))}
+                {interval.map((prize) => (
+                  <TableRow key={prize.code}>
+                    <TableCell>{prize.label}</TableCell>
+                    <TableCell>{prize.rule}</TableCell>
+                    <TableCell>{prize.used}</TableCell>
+                    <TableCell>{prize.available ? 'Available' : prize.nextLabel || 'Waiting'}</TableCell>
+                  </TableRow>
+                ))}
                 {openEnded.map((prize) => (
                   <TableRow key={prize.code}>
                     <TableCell>{prize.label}</TableCell>
@@ -312,7 +321,7 @@ export default function WinterCampaignSpinDesk({ canManage }) {
             </Table>
           </TableContainer>
           <Typography variant="caption" color="text.secondary">
-            Better Luck Next Time and the bumper lucky draw stay an even chance. Their count cannot be capped. A gift count cannot be set below the number already given this week.
+            Gifts up to ₹2,000 and ₹5,000 reset every week. A gift up to ₹7,000 is given once every 10 days, and a gift up to ₹10,000 once every 15 days. Better Luck Next Time and the weekly bumper draw stay an even chance. A weekly count cannot be set below the number already given this week.
           </Typography>
           {canManage ? (
             <Box>

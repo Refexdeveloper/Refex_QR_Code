@@ -82,10 +82,8 @@ async function ensureSettingsRow() {
     end_date: process.env.WINTER_SPIN_END_DATE || "2027-01-15",
     est_spins_per_day: Math.max(1, Number(process.env.WINTER_SPIN_EST_SPINS_PER_DAY || 50)),
     default_caps: JSON.stringify({
-      win_2000: 2,
-      win_5000: 2,
-      win_7000: 1,
-      win_10000: 1,
+      win_2000: 3,
+      win_5000: 3,
     }),
     form_copy: null,
     updated_at: new Date(),

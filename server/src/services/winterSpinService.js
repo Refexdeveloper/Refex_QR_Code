@@ -21,12 +21,14 @@ const PUBLIC_BASE_URL = (
 ).replace(/\/$/, "");
 
 /**
- * Refex Winter Campaign — weekly prize inventory (IST Monday–Sunday).
+ * Refex Winter Campaign prize inventory (Asia/Kolkata).
  *
- * Each new week starts again at the same quantities:
- *   ₹2,000 × 2, ₹5,000 × 2, ₹7,000 × 1, ₹10,000 × 1.
+ * Weekly gifts reset each Monday:
+ *   ₹2,000 × 3, ₹5,000 × 3.
+ * Longer gifts are not weekly:
+ *   ₹7,000 × 1 every 10 days, ₹10,000 × 1 every 15 days.
  * Every other spin is an independent coin flip between Better Luck Next Time
- * and Eligible for Bumper Prize through Lucky Draw. There is no fixed count
+ * and participation in the weekly bumper draw. There is no fixed count
  * for either of those.
  */
 const PRIZES = [
@@ -42,28 +44,30 @@ const PRIZES = [
     label: "Gift worth up to ₹2,000",
     shortLabel: "Gift up to ₹2,000",
     isWin: true,
-    weeklyCap: 2,
+    weeklyCap: 3,
   },
   {
     code: "win_5000",
     label: "Gift worth up to ₹5,000",
     shortLabel: "Gift up to ₹5,000",
     isWin: true,
-    weeklyCap: 2,
+    weeklyCap: 3,
   },
   {
     code: "win_7000",
     label: "Gift worth up to ₹7,000",
     shortLabel: "Gift up to ₹7,000",
     isWin: true,
-    weeklyCap: 1,
+    weeklyCap: null,
+    intervalDays: 10,
   },
   {
     code: "win_10000",
     label: "Gift worth up to ₹10,000",
     shortLabel: "Gift up to ₹10,000",
     isWin: true,
-    weeklyCap: 1,
+    weeklyCap: null,
+    intervalDays: 15,
   },
   {
     code: "bumper",
@@ -84,6 +88,7 @@ const PRIZE_BY_CODE = Object.fromEntries(PRIZES.map((p) => [p.code, p]));
 const EST_SPINS_PER_DAY = Number(process.env.WINTER_SPIN_EST_SPINS_PER_DAY || 50);
 const PACE_SAMPLE_SPINS = 8;
 const CAPPED_PRIZE_CODES = PRIZES.filter((prize) => prize.weeklyCap != null).map((prize) => prize.code);
+const INTERVAL_PRIZES = PRIZES.filter((prize) => prize.intervalDays);
 
 let configCache = null;
 
@@ -154,11 +159,52 @@ async function getCampaignConfig() {
         updated_at: new Date(),
       });
     }
+    if (await migrateLegacyGiftRules(row)) {
+      await row.reload();
+    }
     configCache = rowToConfig(row);
   } catch (error) {
     return fallback;
   }
   return configCache;
+}
+
+function readStoredCaps(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function migrateLegacyGiftRules(row) {
+  const stored = readStoredCaps(row.default_caps);
+  const legacy =
+    stored &&
+    Number(stored.win_2000) === 2 &&
+    Number(stored.win_5000) === 2 &&
+    Number(stored.win_7000) === 1 &&
+    Number(stored.win_10000) === 1;
+  if (stored && !legacy) return false;
+
+  await row.update({
+    default_caps: JSON.stringify(builtinCaps()),
+    updated_at: new Date(),
+  });
+  await WinterSpinWeeklyStock.update(
+    { cap: 3 },
+    {
+      where: {
+        week_key: getWeekKey(),
+        prize_code: ["win_2000", "win_5000"],
+        cap: 2,
+      },
+    }
+  );
+  return true;
 }
 
 function clearCampaignConfigCache() {
@@ -304,7 +350,7 @@ function getRemainingDaysInWeek(date = new Date()) {
  * Spins still expected after this one. Sunday (or the last day) returns 0 so
  * any cash still in stock is awarded before the week ends. A brand-new week
  * uses the daily estimate; once eight people have spun, the week's own rate
- * takes over and a quiet week still gives out its six cash prizes.
+ * takes over and a quiet week still gives out the weekly gifts that are left.
  */
 function expectedFutureSpins(spinsSoFar, date = new Date(), estSpinsPerDay = EST_SPINS_PER_DAY) {
   const futureDays = Math.max(0, getRemainingDaysInWeek(date) - 1);
@@ -368,6 +414,54 @@ async function consumeWeeklyStock(weekKey, prizeCode, transaction) {
   return (meta?.affectedRows || 0) > 0;
 }
 
+function daysBetweenIso(earlier, later) {
+  const [y1, m1, d1] = earlier.split("-").map(Number);
+  const [y2, m2, d2] = later.split("-").map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+}
+
+/**
+ * A longer gift can be given once the previous one is intervalDays old.
+ * It is then spread across the next interval, and the last day awards it
+ * to the next spin so the gap does not run long.
+ */
+function intervalWindow(lastIso, todayIso, intervalDays, campaignStart) {
+  const windowStart = lastIso ? addIsoDays(lastIso, intervalDays) : campaignStart;
+  if (!windowStart || todayIso < windowStart) {
+    return { eligible: false, nextDate: windowStart || todayIso };
+  }
+  const into = Math.max(0, daysBetweenIso(windowStart, todayIso));
+  return {
+    eligible: true,
+    nextDate: null,
+    daysLeftIncludingToday: Math.max(1, intervalDays - into),
+  };
+}
+
+function shouldAwardInterval(daysLeftIncludingToday, estSpinsPerDay) {
+  const futureDays = Math.max(0, daysLeftIncludingToday - 1);
+  if (futureDays === 0) return true;
+  const horizon = futureDays * Math.max(1, Number(estSpinsPerDay) || EST_SPINS_PER_DAY) + 1;
+  const scale = 1_000_000;
+  const threshold = Math.floor((1 / horizon) * scale);
+  return crypto.randomInt(0, scale) < threshold;
+}
+
+async function lockIntervalAwardDate(prize, transaction) {
+  const [row] = await WinterSpinWeeklyStock.findOrCreate({
+    where: { week_key: "interval", prize_code: prize.code },
+    defaults: { week_key: "interval", prize_code: prize.code, cap: 1, used: 0 },
+    transaction,
+  });
+  await row.reload({ transaction, lock: transaction.LOCK.UPDATE });
+  const latest = await WinterSpinEntry.findOne({
+    where: { prize_code: prize.code },
+    order: [["spun_at", "DESC"]],
+    transaction,
+  });
+  return latest?.spun_at ? getIstDateString(new Date(latest.spun_at)) : null;
+}
+
 async function pickSecurePrize(weekKey, transaction) {
   await ensureWeeklyStock(weekKey, transaction);
 
@@ -377,10 +471,24 @@ async function pickSecurePrize(weekKey, transaction) {
     lock: transaction.LOCK.UPDATE,
   });
   const config = await getCampaignConfig();
+  const today = getIstDateString();
   const spinsSoFar = await WinterSpinEntry.count({
     where: { week_key: weekKey },
     transaction,
   });
+
+  const dueIntervals = [];
+  const openIntervals = [];
+  for (const prize of INTERVAL_PRIZES) {
+    const lastIso = await lockIntervalAwardDate(prize, transaction);
+    const window = intervalWindow(lastIso, today, prize.intervalDays, config.startDate);
+    if (!window.eligible) continue;
+    if (window.daysLeftIncludingToday <= 1) dueIntervals.push(prize);
+    else openIntervals.push({ prize, daysLeft: window.daysLeftIncludingToday });
+  }
+  if (dueIntervals.length) {
+    return dueIntervals[crypto.randomInt(0, dueIntervals.length)];
+  }
 
   let cashChoices = stocks
     .map((row) => ({
@@ -390,15 +498,31 @@ async function pickSecurePrize(weekKey, transaction) {
     .filter((row) => row.prize && row.prize.weeklyCap != null && row.weight > 0);
 
   const remainingSlots = cashChoices.reduce((sum, row) => sum + row.weight, 0);
-
+  let weeklyPick = null;
   if (shouldAwardCash(remainingSlots, spinsSoFar, new Date(), config.estSpinsPerDay)) {
-    for (let attempt = 0; attempt < cashChoices.length; attempt += 1) {
-      const picked = cryptoWeightedPick(cashChoices);
+    weeklyPick = cryptoWeightedPick(cashChoices);
+  }
+
+  const intervalHits = openIntervals
+    .filter((item) => shouldAwardInterval(item.daysLeft, config.estSpinsPerDay))
+    .map((item) => item.prize);
+
+  if (intervalHits.length) {
+    return intervalHits[crypto.randomInt(0, intervalHits.length)];
+  }
+
+  if (weeklyPick?.prize) {
+    const chosen = new Set();
+    while (cashChoices.length) {
+      const picked = weeklyPick.prize && !chosen.has(weeklyPick.prize.code)
+        ? weeklyPick
+        : cryptoWeightedPick(cashChoices);
+      weeklyPick = null;
       if (!picked?.prize) break;
+      chosen.add(picked.prize.code);
       const ok = await consumeWeeklyStock(weekKey, picked.prize.code, transaction);
       if (ok) return picked.prize;
       cashChoices = cashChoices.filter((row) => row.prize.code !== picked.prize.code);
-      if (!cashChoices.length) break;
     }
   }
 
@@ -867,6 +991,21 @@ async function buildSpinDesk(weekKey) {
   const awardedByCode = Object.fromEntries(
     awardedRows.map((row) => [row.prize_code, Number(row.total) || 0])
   );
+  const intervalCodes = INTERVAL_PRIZES.map((prize) => prize.code);
+  const intervalAwards = intervalCodes.length
+    ? await WinterSpinEntry.findAll({
+        where: { prize_code: intervalCodes },
+        attributes: ["prize_code", "spun_at"],
+        order: [["spun_at", "DESC"]],
+      })
+    : [];
+  const lastAwardByCode = {};
+  intervalAwards.forEach((row) => {
+    if (!lastAwardByCode[row.prize_code] && row.spun_at) {
+      lastAwardByCode[row.prize_code] = getIstDateString(new Date(row.spun_at));
+    }
+  });
+  const today = getIstDateString();
   const weekEnd = addIsoDays(weekKey, 6);
 
   return {
@@ -883,6 +1022,28 @@ async function buildSpinDesk(weekKey) {
     defaultCaps: config.defaultCaps,
     prizes: PRIZES.map((prize) => {
       const awarded = awardedByCode[prize.code] || 0;
+      if (prize.intervalDays) {
+        const window = intervalWindow(
+          lastAwardByCode[prize.code] || null,
+          today,
+          prize.intervalDays,
+          config.startDate
+        );
+        return {
+          code: prize.code,
+          label: prize.label,
+          limited: false,
+          interval: true,
+          intervalDays: prize.intervalDays,
+          rule: `1 every ${prize.intervalDays} days`,
+          cap: null,
+          used: awarded,
+          remaining: null,
+          available: window.eligible,
+          nextDate: window.nextDate,
+          nextLabel: window.nextDate ? formatShortDate(window.nextDate) : null,
+        };
+      }
       if (prize.weeklyCap == null) {
         return {
           code: prize.code,
