@@ -146,7 +146,7 @@ DetailField.propTypes = {
 function shortPrize(label) {
   if (!label) return 'Not spun';
   if (/better luck/i.test(label)) return 'Better luck';
-  if (/bumper/i.test(label)) return 'Bumper draw';
+  if (/bumper/i.test(label)) return 'Weekly bumper draw';
   const amount = String(label).match(/₹[\d,]+/);
   if (amount) return `Gift ${amount[0]}`;
   return label;

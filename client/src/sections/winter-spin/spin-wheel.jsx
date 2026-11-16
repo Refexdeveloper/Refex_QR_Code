@@ -49,10 +49,11 @@ function drawWheel(ctx, size, rotationRad, segments) {
       ctx.fillText(segment.emoji, emojiR, 0);
     }
     ctx.fillStyle = segment.textColor;
-    ctx.font = `bold ${Math.max(10, size * 0.028)}px "Public Sans", sans-serif`;
     const lines = segment.label.split('\n');
+    const fontSize = Math.max(9, size * (lines.length > 2 ? 0.022 : 0.028));
+    ctx.font = `bold ${fontSize}px "Public Sans", sans-serif`;
     lines.forEach((line, li) => {
-      ctx.fillText(line, textR, (li - (lines.length - 1) / 2) * (size * 0.034));
+      ctx.fillText(line, textR, (li - (lines.length - 1) / 2) * (size * 0.03));
     });
     ctx.restore();
   });

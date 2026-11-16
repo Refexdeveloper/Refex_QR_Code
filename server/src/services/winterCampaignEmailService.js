@@ -17,7 +17,7 @@ function prizeNote(prizeCode) {
     return "This spin does not include an instant gift, and you remain eligible for the weekly bumper lucky draw.";
   }
   if (prizeCode === "bumper") {
-    return "You are eligible for the bumper gift through the lucky draw. This spin does not include an instant gift.";
+    return "This result is participation in the weekly bumper draw. This spin does not include an instant gift.";
   }
   if (["win_2000", "win_5000", "win_7000", "win_10000"].includes(prizeCode)) {
     return "This is an instant gift, not cash. The store manager confirms it with the Refex Floor Manager before handover.";
@@ -100,7 +100,10 @@ async function sendSpinThankYou(entry) {
     return { sent: false, skipped: true, error: "Invalid recipient email" };
   }
 
-  const prizeLabel = entry.prize_label || "your result";
+  const prizeLabel =
+    entry.prize_code === "bumper"
+      ? "Participation in weekly bumper draw"
+      : entry.prize_label || "your result";
   const note = prizeNote(entry.prize_code);
   const content = {
     name: submission.name || entry.name,

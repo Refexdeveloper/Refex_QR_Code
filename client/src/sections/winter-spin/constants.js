@@ -36,12 +36,12 @@ export const WHEEL_SEGMENTS = [
   },
   {
     code: 'bumper',
-    label: 'Bumper Gift\nLucky Draw',
+    label: 'Participation in\nweekly bumper\ndraw',
     color: BRAND.orange,
     textColor: '#FFFFFF',
     icon: 'solar:cup-star-bold-duotone',
     emoji: '🏆',
-    badge: 'Lucky draw',
+    badge: 'Weekly bumper draw',
   },
   {
     code: 'win_5000',

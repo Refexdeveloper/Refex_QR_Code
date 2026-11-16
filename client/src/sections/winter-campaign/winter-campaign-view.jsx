@@ -276,10 +276,17 @@ export default function WinterCampaignView() {
                 : step
             );
           }
+          const renameBumper = (value) =>
+            typeof value === 'string'
+              ? value.replaceAll('Eligible for Bumper Gift through Lucky Draw', 'Participation in weekly bumper draw')
+              : value;
+          if (Array.isArray(next.prizes)) next.prizes = next.prizes.map(renameBumper);
           if (Array.isArray(next.terms)) {
             const previousRule =
               '3. Each eligible Participant who meets the outlet minimum receives one entry and one spin, whatever the outlet and whatever the amount spent above the minimum. Each entry in a weekly bumper prize draw has an equal chance. The spin can show: (a) Better Luck Next Time; or (b) Eligible for Bumper Gift through Lucky Draw; or (c) a gift worth up to ₹2,000, ₹5,000, ₹7,000, or ₹10,000.';
-            next.terms = next.terms.map((item) => (item === previousRule ? DEFAULT_FORM_COPY.terms[2] : item));
+            next.terms = next.terms.map((item) =>
+              item === previousRule ? DEFAULT_FORM_COPY.terms[2] : renameBumper(item)
+            );
           }
           setCopy(next);
         }

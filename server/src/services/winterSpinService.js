@@ -67,8 +67,8 @@ const PRIZES = [
   },
   {
     code: "bumper",
-    label: "Eligible for Bumper Gift through Lucky Draw",
-    shortLabel: "Bumper Gift Lucky Draw",
+    label: "Participation in weekly bumper draw",
+    shortLabel: "Participation in weekly bumper draw",
     isWin: true,
     weeklyCap: null,
   },

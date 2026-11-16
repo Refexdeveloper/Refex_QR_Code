@@ -27,7 +27,7 @@ export default function PrizeResult({ entry, alreadySpun }) {
     title = 'Congratulations!';
     accent = BRAND.gold;
   } else if (isBumper) {
-    title = 'Lucky Draw Entry!';
+    title = 'Weekly bumper draw';
     accent = BRAND.orange;
   } else if (isBetterLuck) {
     title = 'Thanks for playing!';
@@ -152,7 +152,7 @@ export default function PrizeResult({ entry, alreadySpun }) {
         )}
         {isBumper && (
           <Typography variant="caption" sx={{ lineHeight: 1.5 }}>
-            You are eligible for the bumper gift through the lucky draw. This spin does not include an instant gift.
+            This result is participation in the weekly bumper draw. This spin does not include an instant gift.
           </Typography>
         )}
         {isBetterLuck && (
