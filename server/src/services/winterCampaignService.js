@@ -46,14 +46,14 @@ function outletMatchWhere(outletLabel, email, phone) {
   };
 }
 
-function duplicateOutletMessage(matches, email, phone) {
-  const emailUsed = matches.some((row) => row.email === email);
-  const phoneUsed = matches.some((row) => row.phone === phone);
-  if (emailUsed && phoneUsed) {
-    return "This email and mobile number have already been used for this outlet.";
-  }
-  if (emailUsed) return "This email has already been used for this outlet.";
-  return "This mobile number has already been used for this outlet.";
+function entryToReopen(matches, email, phone) {
+  if (!matches.length) return null;
+  const byBoth = matches.find((row) => row.email === email && row.phone === phone);
+  if (byBoth) return byBoth;
+  const byEmail = matches.find((row) => row.email === email);
+  const byPhone = matches.find((row) => row.phone === phone);
+  if (byEmail && byPhone && byEmail.id !== byPhone.id) return null;
+  return byEmail || byPhone || null;
 }
 
 async function openExistingSpin(existing) {
@@ -160,14 +160,12 @@ async function registerSubmission({
 
   if (priorEntries.length) {
     removeUploaded(uploads);
-    const samePerson = priorEntries.find(
-      (row) => row.email === cleanEmail && row.phone === cleanPhone
-    );
-    if (priorEntries.length === 1 && samePerson) return openExistingSpin(samePerson);
+    const existing = entryToReopen(priorEntries, cleanEmail, cleanPhone);
+    if (existing) return openExistingSpin(existing);
     return {
       ok: false,
       status: 409,
-      message: duplicateOutletMessage(priorEntries, cleanEmail, cleanPhone),
+      message: "This email and mobile number are already used for this outlet on different entries.",
     };
   }
 
@@ -247,13 +245,13 @@ async function registerSubmission({
       const again = await WinterCampaignSubmission.findAll({
         where: outletMatchWhere(chosenOutlet.label, cleanEmail, cleanPhone),
       });
-      const samePerson = again.find((row) => row.email === cleanEmail && row.phone === cleanPhone);
-      if (again.length === 1 && samePerson) return openExistingSpin(samePerson);
+      const existing = entryToReopen(again, cleanEmail, cleanPhone);
+      if (existing) return openExistingSpin(existing);
       if (again.length) {
         return {
           ok: false,
           status: 409,
-          message: duplicateOutletMessage(again, cleanEmail, cleanPhone),
+          message: "This email and mobile number are already used for this outlet on different entries.",
         };
       }
     }
