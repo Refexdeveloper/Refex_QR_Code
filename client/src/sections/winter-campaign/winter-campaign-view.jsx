@@ -11,6 +11,7 @@ import { alpha } from '@mui/material/styles';
 import Checkbox from '@mui/material/Checkbox';
 import MenuItem from '@mui/material/MenuItem';
 import Accordion from '@mui/material/Accordion';
+import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
@@ -22,6 +23,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Iconify from 'src/components/iconify';
 
 import { BRAND } from '../winter-spin/constants';
+import { COUNTRIES } from './countries';
 import { DEFAULT_FORM_COPY } from './form-copy-defaults';
 
 // ----------------------------------------------------------------------
@@ -84,39 +86,6 @@ const OUTLETS = [
   label: `${brand} · ${location}`,
 }));
 
-const COUNTRIES = [
-  { iso: 'IN', name: 'India', dial: '91', min: 10, max: 10 },
-  { iso: 'AE', name: 'United Arab Emirates', dial: '971', min: 8, max: 9 },
-  { iso: 'AU', name: 'Australia', dial: '61', min: 9, max: 9 },
-  { iso: 'BD', name: 'Bangladesh', dial: '880', min: 10, max: 10 },
-  { iso: 'BH', name: 'Bahrain', dial: '973', min: 8, max: 8 },
-  { iso: 'CA', name: 'Canada', dial: '1', min: 10, max: 10 },
-  { iso: 'CN', name: 'China', dial: '86', min: 11, max: 11 },
-  { iso: 'DE', name: 'Germany', dial: '49', min: 10, max: 11 },
-  { iso: 'FR', name: 'France', dial: '33', min: 9, max: 9 },
-  { iso: 'GB', name: 'United Kingdom', dial: '44', min: 10, max: 10 },
-  { iso: 'HK', name: 'Hong Kong', dial: '852', min: 8, max: 8 },
-  { iso: 'ID', name: 'Indonesia', dial: '62', min: 9, max: 12 },
-  { iso: 'IE', name: 'Ireland', dial: '353', min: 9, max: 9 },
-  { iso: 'JP', name: 'Japan', dial: '81', min: 10, max: 10 },
-  { iso: 'KE', name: 'Kenya', dial: '254', min: 9, max: 9 },
-  { iso: 'KW', name: 'Kuwait', dial: '965', min: 8, max: 8 },
-  { iso: 'LK', name: 'Sri Lanka', dial: '94', min: 9, max: 9 },
-  { iso: 'MV', name: 'Maldives', dial: '960', min: 7, max: 7 },
-  { iso: 'MY', name: 'Malaysia', dial: '60', min: 9, max: 10 },
-  { iso: 'NL', name: 'Netherlands', dial: '31', min: 9, max: 9 },
-  { iso: 'NP', name: 'Nepal', dial: '977', min: 10, max: 10 },
-  { iso: 'NZ', name: 'New Zealand', dial: '64', min: 8, max: 10 },
-  { iso: 'OM', name: 'Oman', dial: '968', min: 8, max: 8 },
-  { iso: 'PH', name: 'Philippines', dial: '63', min: 10, max: 10 },
-  { iso: 'QA', name: 'Qatar', dial: '974', min: 8, max: 8 },
-  { iso: 'SA', name: 'Saudi Arabia', dial: '966', min: 9, max: 9 },
-  { iso: 'SG', name: 'Singapore', dial: '65', min: 8, max: 8 },
-  { iso: 'TH', name: 'Thailand', dial: '66', min: 9, max: 9 },
-  { iso: 'US', name: 'United States', dial: '1', min: 10, max: 10 },
-  { iso: 'ZA', name: 'South Africa', dial: '27', min: 9, max: 9 },
-];
-
 const BILL_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'pdf', 'heic', 'heif']);
 
 const fieldSx = {
@@ -171,7 +140,7 @@ function phoneError(country, raw) {
     return `Enter a valid ${span}-digit mobile number for ${country.name}.`;
   }
   const full = `${country.dial}${national}`;
-  if (full.length < 8 || full.length > 15) return 'Enter a valid mobile number.';
+  if (full.length < 7 || full.length > 15) return 'Enter a valid mobile number.';
   return '';
 }
 
@@ -568,30 +537,25 @@ export default function WinterCampaignView() {
               sx={fieldSx}
             />
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-              <TextField
-                select
-                required
-                label="Country"
-                value={country.iso}
+              <Autocomplete
+                options={COUNTRIES}
+                value={country}
                 disabled={loading}
-                onChange={(e) => {
-                  const next = COUNTRIES.find((item) => item.iso === e.target.value) || COUNTRIES[0];
+                disableClearable
+                autoHighlight
+                getOptionLabel={(item) => `${item.name} (+${item.dial})`}
+                isOptionEqualToValue={(option, value) => option.iso === value.iso}
+                onChange={(_, next) => {
+                  if (!next) return;
                   setCountry(next);
                   setErrors((prev) => ({ ...prev, phone: phone ? phoneError(next, phone) : '' }));
                 }}
-                SelectProps={{
-                  MenuProps: {
-                    PaperProps: { sx: { bgcolor: '#0E2438', color: '#fff', maxHeight: 320 } },
-                  },
+                componentsProps={{
+                  paper: { sx: { bgcolor: '#0E2438', color: '#fff', maxHeight: 320 } },
                 }}
-                sx={{ ...fieldSx, width: { xs: 1, sm: 220 }, flexShrink: 0 }}
-              >
-                {COUNTRIES.map((item) => (
-                  <MenuItem key={item.iso} value={item.iso} sx={{ color: '#fff' }}>
-                    {item.name} (+{item.dial})
-                  </MenuItem>
-                ))}
-              </TextField>
+                sx={{ width: { xs: 1, sm: 300 }, flexShrink: 0 }}
+                renderInput={(params) => <TextField {...params} required label="Country" sx={fieldSx} />}
+              />
               <TextField
                 required
                 fullWidth

@@ -263,7 +263,7 @@ function normalizePhone(raw) {
 }
 
 function isValidPhone(digits) {
-  if (!/^\d{8,15}$/.test(digits)) return false;
+  if (!/^\d{7,15}$/.test(digits)) return false;
   // New Indian entries are 91 plus a 10-digit mobile. A 10-digit value that
   // happens to start with 91 is an older national number, not a country code.
   if (digits.startsWith("91") && digits.length !== 10) {
